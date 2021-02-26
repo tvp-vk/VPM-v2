@@ -1,0 +1,5 @@
+latvia_auth_form:
+  js:
+    js/latvia_auth_form.js: {}
+  dependencies:
+    - core/jquery

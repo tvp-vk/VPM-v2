@@ -1,0 +1,48 @@
+latvia_auth.admin_form:
+  path: '/admin/config/system/latvia_auth'
+  defaults:
+    _form: 'Drupal\latvia_auth\Form\OneLoginIntegrationAdminForm'
+    _title: 'Latvija.lv integration Adminform'
+    _description: 'Settings for the OneLogin Integration module.'
+  requirements:
+    _permission: 'latvialv auth settings'
+
+latvia_auth.sso:
+  path: 'onelogin_saml/sso'
+  defaults:
+    _controller: 'Drupal\latvia_auth\Controller\OneLoginIntegrationController::singleSignOn'
+    _title: 'SAML SP-Initiated SSO'
+  requirements:
+    _access: 'TRUE'
+  options:
+    no_cache: 'TRUE'
+
+latvia_auth.acs:
+  path: 'onelogin_saml/acs'
+  defaults:
+    _controller: 'Drupal\latvia_auth\Controller\OneLoginIntegrationController::assertionConsumerService'
+    _title: 'SAML Assertion Consumer Service'
+  requirements:
+    _access: 'TRUE'
+  options:
+    no_cache: 'TRUE'
+
+latvia_auth.slo:
+  path: 'onelogin_saml/slo'
+  defaults:
+    _controller: '\Drupal\latvia_auth\Controller\OneLoginIntegrationController::singleLogOut'
+    _title: 'SAML Service Log Out.'
+  requirements:
+    _access: 'TRUE'
+  options:
+    no_cache: 'TRUE'
+    
+latvia_auth.sls:
+  path: 'onelogin_saml/sls'
+  defaults:
+    _controller: '\Drupal\latvia_auth\Controller\OneLoginIntegrationController::singleLogOutService'
+    _title: 'SAML Service Logout Service'
+  requirements:
+    _access: 'TRUE'
+  options:
+    no_cache: 'TRUE'

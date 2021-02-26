@@ -1,0 +1,5 @@
+latvia_auth.admin_form:
+  title: 'Latvija.lv auth settings'
+  parent: system.admin_config_system
+  description: 'Control the various settings of the latvija.lv authentication module'
+  route_name: latvia_auth.admin_form

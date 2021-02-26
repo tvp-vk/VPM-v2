@@ -1,0 +1,7 @@
+name: 'Latvija.lv authentication'
+type: module
+description : 'Provides a mechanism for latvija.lv user authentication.'
+package: Custom
+core: 8.x
+dependencies:
+ - drupal:user

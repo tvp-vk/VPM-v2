@@ -1,0 +1,333 @@
+<?php
+
+use Drupal\Core\Form\FormStateInterface;
+use Drupal\Core\Link;
+use Drupal\Core\Url;
+use Drupal\Core\Entity\EntityFormInterface;
+
+/**
+ * Implements hook_form_alter().
+ */
+function latvia_auth_form_alter(&$form, FormStateInterface $form_state, $form_id) {
+  switch ($form_id) {
+    case 'user_login_form':
+      _latvia_auth_user_login_form_alter($form);
+      break;
+
+    case 'user_form':
+      _latvia_auth_hide_drupal_user_fields($form, $form_state);
+      break;
+  }
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter().
+ */
+function latvia_auth_form_user_login_block_alter(&$form, FormStateInterface $form_state, $form_id) {
+  _latvia_auth_user_login_form_alter($form);
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter().
+ */
+function latvia_auth_form_user_login_alter(&$form, FormStateInterface $form_state, $form_id) {
+  _latvia_auth_user_login_form_alter($form, $form_state);
+}
+
+/**
+ * Alters the user login form.
+ *
+ * @param array $form
+ *   The form itself.
+ */
+function _latvia_auth_user_login_form_alter(array &$form) {
+  // Return without executing if the functionality is not enabled.
+  $config = \Drupal::config('latvia_auth.settings');
+  \Drupal::service('renderer')->addCacheableDependency($form, $config);
+
+  if (!$config->get('activate')) {
+    return;
+  }
+
+  // Add a "Log in using SAML" link to the user-login form.
+  $form['latvia_auth_login_links'] = [
+    '#type' => 'item',
+    '#markup' => Link::fromTextAndUrl(t('Log in using Latvia.lv'), Url::fromRoute('latvia_auth.sso', [], ['absolute' => TRUE, 'external' => TRUE]))->toString(),
+    '#attributes' => ['class' => 'latvia_auth_login-link'],
+    '#weight' => 1,
+  ];
+  // Disable cache
+  $form['#cache']['max-age'] = 0;
+
+  // If disabled drupal login limit access to form fields and action buttons
+  if ($config->get('disable_default_login')) {
+    $form['name']['#access'] = FALSE;
+    $form['pass']['#access'] = FALSE;
+    $form['actions']['#access'] = FALSE;
+    unset($form['#validate']);
+    unset($form['#submit']);
+  }
+}
+
+/**
+ * Hides some of the user fields on the user edit page.
+ *
+ * @param array $form
+ *   The user form.
+ */
+function _latvia_auth_hide_drupal_user_fields(array &$form, &$form_state) {
+  $config = \Drupal::config('latvia_auth.settings');
+  if ($config->get('activate')) {
+    // If the disable current password fields settings is set in the module and
+    // the user is NOT an administrator, hide the fields.
+
+    if ($config->get('disable_set_drupal_pwd')) {
+      // Turn off Current password field's validation
+      $form_state->set('user_pass_reset', 1);
+      // Hide the Current password fields
+      $form['account']['current_pass']['#access'] = FALSE;
+      // Disable password by default.
+      $form['account']['pass']['#access'] = FALSE;
+    }
+  }
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter().
+ *
+ * {@inheritdoc}
+ */
+function latvia_auth_form_user_register_form_alter(&$form, FormStateInterface $form_state) {
+  $form['account']['name']['#required'] = FALSE;
+  $form['account']['name']['#access'] = FALSE;
+  $form['account']['mail']['#required'] = TRUE;
+  $form['account']['notify']['#default_value'] = 1;
+  $form['account']['notify']['#access'] = FALSE;
+  $form['account']['pass']['#access'] = FALSE;
+  $form['account']['pass']['#required'] = FALSE;
+
+  array_unshift($form['#validate'], 'latvia_auth_prepare_form_user_values');
+  $form['#validate'][] = 'latvia_auth_form_user_post_validate';
+  $form['#validate'][] = 'latvia_auth_form_user_pk_validate';
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter().
+ *
+ * {@inheritdoc}
+ */
+function latvia_auth_form_user_form_alter(&$form, FormStateInterface $form_state) {
+  $form['account']['name']['#required'] = FALSE;
+  $form['account']['name']['#access'] = FALSE;
+  $form['account']['mail']['#required'] = TRUE;
+
+  // Check if Latvija.lv is enabled
+  $config = \Drupal::config('latvia_auth.settings');
+
+  if ($config->get('activate')) {
+    // If the disable current password fields settings is set in the module and
+    // the user is NOT an administrator, hide the fields.
+
+    if ($config->get('disable_set_drupal_pwd')) {
+      $form['account']['pass']['#access'] = FALSE;
+      $form['account']['pass']['#required'] = FALSE;
+
+      if (isset($form['account']['current_pass'])) {
+        $form['account']['current_pass']['#access'] = FALSE;
+        $form['account']['current_pass']['#required'] = FALSE;
+      }
+    }
+  }
+
+  $form['field_user_personal_code']['#access'] = FALSE;
+
+  //Person id on create should be required, but on edit should not - TVP-1465
+  if ($form["#form_id"] == "user_register_form"){
+    $required = TRUE;
+  } else {
+    $required = FALSE;
+  }
+  $form['custom_personal_code'] = [
+    '#type' => 'textfield',
+    '#title' => t('Personal code'),
+    '#maxlength' => 255,
+    '#description' => t("User personal code. Example: 000000 00000"),
+    '#required' => $required,
+    '#weight' => '1'
+  ];
+
+  $user = \Drupal::routeMatch()->getParameter('user');
+  if ($user instanceof \Drupal\user\UserInterface) {
+    if ($user->id() == \Drupal::currentUser()->id()) {
+      $form['role_change']['#access'] = FALSE;
+    }
+  }
+
+  array_unshift($form['#validate'], 'latvia_auth_prepare_form_user_values');
+  $form['#validate'][] = 'latvia_auth_form_user_pk_validate';
+}
+
+/**
+ * Copy the 'mail' and 'personal_code' fields before form validation.
+ *
+ * @param array $form
+ * @param \Drupal\Core\Form\FormStateInterface $form_state
+ */
+function latvia_auth_prepare_form_user_values(&$form, FormStateInterface $form_state) {
+  if(!$form_state->getValue('name')) {
+    $email = $form_state->getValue('mail');
+    $email = explode('@', $email);
+    $userName = _latvia_auth_unique_user_name($email[0]);
+    $form_state->setValue('name', $userName);
+  }
+
+  if($personal_code = $form_state->getValue('custom_personal_code')) {
+    // Remove unwanted chars
+    $personal_code = preg_replace('/\D/', '', $personal_code);
+
+    $personal_code = \Drupal::service('latvia_auth.cryptor')->hashString($personal_code);
+    $form_state->setValue(['field_user_personal_code', '0', 'value'], $personal_code);
+  }
+}
+
+/**
+ * Remove the errors related to 'name' field.
+ * @param $form
+ * @param \Drupal\Core\Form\FormStateInterface $form_state
+ */
+function latvia_auth_form_user_post_validate(&$form, FormStateInterface $form_state) {
+  $errors = $form_state->getErrors();
+  unset($errors['name']);
+  $form_state->clearErrors();
+  foreach($errors as $field => $value) {
+    $form_state->setErrorByName($field, $value);
+  }
+}
+
+/**
+ * Validate user personal code.
+ * @param $form
+ * @param \Drupal\Core\Form\FormStateInterface $form_state
+ */
+function latvia_auth_form_user_pk_validate(&$form, FormStateInterface $form_state) {
+  if($personal_code = $form_state->getValue('custom_personal_code')) {
+    if (!_latvia_auth_person_code_validator($personal_code)) {
+      $form_state->setErrorByName('custom_personal_code', t('Incorrect user personal code!'));
+    }
+    $uid = NULL;
+    if ($form_state->getFormObject() instanceof EntityFormInterface) {
+      $uid = $form_state->getformObject()->getEntity()->id();
+    }
+    if(_latvia_auth_validate_pcode_uniqueness($personal_code, $uid)) {
+      $form_state->setErrorByName('custom_personal_code', t('Please insert unique personal code!'));
+    }
+  }
+}
+
+/**
+ * Validates user personal code
+ *
+ * @param string $code
+ * @return void
+ */
+function _latvia_auth_person_code_validator($pk) {
+  $pk = preg_replace('/\D/', '', $pk);
+
+  if (strlen($pk) != 11) {
+    return false;
+  }
+
+  $calc = 1 * $pk[0] + 6 * $pk[1] + 3 * $pk[2] + 7 * $pk[3] + 9 * $pk[4] + 10 * $pk[5] + 5 * $pk[6] + 8 * $pk[7] + 4 * $pk[8] + 2 * $pk[9];
+  $checksum = (1101 - $calc) % 11;
+
+  return $checksum == $pk[10];
+}
+
+/**
+ * Get unique user name for a drupal user
+ *
+ * @param string $orig_name
+ *   User name
+ *
+ * @return string
+ *   Unique user name
+ */
+function _latvia_auth_unique_user_name($orig_name) {
+  $name = '';
+  if ($orig_name) {
+    // filter characters (look at user_validate_name)
+    preg_match_all("/[\x{80}-\x{F7} a-z0-9@_.'-]/i", $orig_name, $f_result);
+    if (isset($f_result[0]) && count($f_result[0])) {
+      $name = implode('', $f_result[0]);
+
+      // remove multiple spaces and trim the name
+      $name = trim($name);
+      $name = preg_replace('/[ ]+/', ' ', $name);
+      if ($name) {
+        // check length (reserve 3 characters for number in next step)
+        $name = substr($name, 0, USERNAME_MAX_LENGTH - 3);
+        // check if the name is unique
+        $i = 0;
+        do {
+          $query = \Drupal::database()->select('users_field_data', 'ufd');
+          $query->addExpression('count(*)', 'matches');
+          $query->condition('ufd.name', (++$i) == 1 ? $name : $name . '_' . $i);
+          $matches = $query->execute()->fetchField();
+        } while ($matches);
+
+        if ($i > 1) {
+          $name = $name . '_' . $i;
+        }
+      }
+    }
+  }
+  return $name;
+}
+
+/**
+ * Validate user personal code
+ *
+ * @param int $code
+ *   Person code
+ *
+ * @return boolean
+ */
+function _latvia_auth_validate_pcode_uniqueness($code, $uid = NULL) {
+  $code = preg_replace('/\D/', '', $code);
+  $code = \Drupal::service('latvia_auth.cryptor')->hashString($code);
+
+  $query = \Drupal::entityTypeManager()->getStorage('user')->getQuery();
+  $query->condition('field_user_personal_code', $code);
+
+  if ($uid) {
+    $query->condition('uid', $uid, '!=');
+  }
+
+  $query_result = $query->execute();
+
+  return (empty($query_result)) ? false : true;
+}
+
+/**
+ * Implements hook_theme().
+ */
+function latvia_auth_theme() {
+  return [
+    'latvia_auth_redirect' => [
+      'variables' => [
+        'data' => NULL,
+        'link' => NULL,
+        'error' => NULL,
+        'token' => NULL
+      ]
+    ],
+    'page__onelogin_saml__acs' => [
+      'template' => 'page--onelogin-saml--acs',
+      'base hook' => 'page',
+    ],
+    'page__onelogin_saml__slo' => [
+      'template' => 'page--onelogin-saml--slo',
+      'base hook' => 'page',
+    ]
+  ];
+}

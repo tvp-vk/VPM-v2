@@ -1,0 +1,18 @@
+<div class="auth-form-wrapp">
+    <div class="auth-logo">
+        <img src="/{{ base_path }}{{ active_theme_path() }}/assets/images/logo.png" alt="Latvijas valsts" />
+    </div>
+    {% if error %}
+        <div>
+            {{ error }}
+        </div>
+    {% else %}
+        <div class="spinner-border spinner-border-lg"></div>
+        <p>Nospiedied iesniegt pogu, ja vietne nereaģe un Jūs netiekat pārvietots tālāk.</p>
+        <form id="auth-form" action="//{{ link }}" method="post">
+            <input type="hidden" name="TVPAuthResponse" value="{{ data }}">
+            <input type="hidden" name="TVPToken" value="{{ token }}">
+            <input type="submit" name="submission_button" class="button form-submit btn btn-primary" value="Iesniegt">
+        </form>
+    {% endif %}
+</div>

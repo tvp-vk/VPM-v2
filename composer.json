@@ -1,0 +1,9 @@
+{
+  "name": "latvia_auth",
+  "description": "Latvija.lv user authentication.",
+  "type": "drupal-module",
+  "homepage": "https://www.drupal.org/project/latvia_auth",
+  "require": {
+    "onelogin/php-saml": "^3.4"
+  }
+}

@@ -1,0 +1,17 @@
+services:
+  latvia_auth.authenticator_service:
+    class: \OneLogin\Saml2\Auth
+    factory: latvia_auth.authenticator_factory:createFromSettings
+  latvia_auth.authenticator_factory:
+    class: Drupal\latvia_auth\SAMLAuthenticatorFactory
+    arguments: ['@config.factory']
+  latvia_auth.authentication_service:
+    class: Drupal\latvia_auth\AuthenticationService
+    arguments: ['@latvia_auth.authenticator_service', '@entity_type.manager', '@messenger', '@logger.factory', '@latvia_auth.cryptor']
+  latvia_auth.route_subscriber:
+    class: Drupal\latvia_auth\EventSubscriber\RouteSubscriber
+    arguments: ['@config.factory', '@router.builder']
+    tags:
+      - { name: event_subscriber }
+  latvia_auth.cryptor:
+    class: Drupal\latvia_auth\Cryptor
